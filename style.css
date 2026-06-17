@@ -1,0 +1,39 @@
+/* 全体の余白をリセットし、画面いっぱいに広げる */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #1a1a1a; /* 作品の雰囲気に合わせて暗めの背景にしています */
+    
+    /* 上下左右の中央に要素を配置する設定 */
+    display: table;
+}
+
+/* bodyをテーブルセルとして扱い、縦横中央揃えを実現 */
+body {
+    display: table-cell;
+    vertical-align: middle;
+    text-align: center;
+}
+
+/* startボタンのスタイリング */
+.start-button {
+    display: inline-block;
+    padding: 15px 40px;
+    font-size: 24px;
+    font-family: sans-serif;
+    text-decoration: none; /* リンクの下線を消す */
+    color: #ffffff;
+    border: 2px solid #ffffff;
+    border-radius: 4px;
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+/* ボタンにホバーしたときの簡易的なエフェクト */
+.start-button:hover {
+    background-color: #ffffff;
+    color: #1a1a1a;
+}
