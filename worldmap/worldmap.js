@@ -11,16 +11,24 @@ let offsetY = 0;     // 画面のY方向の移動量
 let moveSpeed = 10;  // 矢印キーを押した時の移動スピード
 
 let pg;
-let usaImg;
-let franceImg;
-let indiaImg;
-let japanImg;
-let brazilImg;
+let usaImg, franceImg, indiaImg, japanImg, brazilImg;
+let usaModel, franceModel, indiaModel, brazilModel;
 
-let usaModel;
-let franceModel;
-let brazilModel;
+// パフォーマンス改善：各モデルのバウンディングボックスサイズをキャッシュする変数
+let modelSizes = {};
 
+// パフォーマンス改善：関数呼び出しを減らすためのマッピングオブジェクト
+let countryImages = {};
+let countryModels = {};
+
+// 各国への遷移先URLマッピング
+const countryUrls = {
+  2: '/usa/usa.html',
+  3: '/france/france.html',
+  4: '/india/india.html',
+  5: '/japan/japan.html',
+  6: '/brazil/brazil.html'
+};
 
 function preload() {
   usaImg = loadImage('/asset/image/usa.jpg');
@@ -36,56 +44,61 @@ function preload() {
 }
 
 function setup() {
+  // 改善：スマホの高解像度ディスプレイによる負荷を抑える（効果大）
+  pixelDensity(1);
+  
   createCanvas(windowWidth, windowHeight, WEBGL);
   
   imageMode(CENTER);
   angleMode(DEGREES);
 
+  // マッピングの初期化（draw内での条件分岐を高速化するため）
+  countryImages = { 2: usaImg, 3: franceImg, 4: indiaImg, 5: japanImg, 6: brazilImg };
+  countryModels = { 2: usaModel, 3: franceModel, 4: indiaModel, 5: franceModel, 6: brazilModel };
+
+  // 改善：モデルのサイズ（BoundingBox）を事前に1回だけ計算してキャッシュする
+  modelSizes[2] = usaModel.calculateBoundingBox().size;
+  modelSizes[3] = franceModel.calculateBoundingBox().size;
+  modelSizes[4] = indiaModel.calculateBoundingBox().size;
+  modelSizes[5] = franceModel.calculateBoundingBox().size; // 元コード準拠（フランスのモデルを日本に使用）
+  modelSizes[6] = brazilModel.calculateBoundingBox().size;
+
   let savedCountries = localStorage.getItem('selectedCountriesData');
   if (savedCountries) {
-    // 保存されていた記憶があれば配列に戻して復活させる
     selectedCountries = JSON.parse(savedCountries);
-    
-    // 読み込んだら、ブラウザの記憶（localStorage）の中身をすぐ消去する！
     localStorage.removeItem('selectedCountriesData');
   }
   
-  // 画像のデザインを元にした簡易ドット世界地図データ (0:海、1:陸地, 2:アメリカ, 3:フランス, 4:インド, 5:日本, 6:ブラジル)
+  // 地図データ
   worldGrid = [
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,1,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0],
-    
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0, 1,1,1,1,1, 1,1,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,1,1,0,0, 0,0,0,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,0, 0,0,0,0,2, 2,2,0,0,0, 0,0,0,0,0, 1,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 1,1,1,0,0, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,0,0,2, 2,2,2,1,1, 1,1,1,1,1, 1,1,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,1, 1,1,1,0,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,0,0,2,2, 2,2,2,1,1, 1,1,1,1,1, 1,0,0,0,0, 0,0,0,0,0, 0],
-    
     [0, 0,0,0,1,1, 0,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 0,0,0,0,2, 2,2,2,1,1, 1,1,1,1,1, 1,0,0,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,1,1, 0,0,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,0,1,0, 0,0,0,0,2, 2,2,0,1,1, 1,1,1,1,1, 0,0,0,1,1, 1,0,0,0,0, 0],
     [0, 0,1,0,0,0, 0,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,0,0,1,0, 0,0,0,0,2, 0,0,0,0,0, 1,1,1,1,1, 1,1,0,1,1, 1,0,0,0,0, 0],
     [0, 0,1,0,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,1,1,1,1, 1,1,1,1,1, 1,1,0,0,0, 0],
     [0, 0,0,3,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 2,2,2,2,2, 2,1,1,1,1, 0,0,0,0,0, 0],
-    
     [0, 0,0,3,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 2,2,2,2,2, 2,2,2,2,2, 0,0,0,0,0, 0],
     [0, 0,1,1,0,1, 0,0,0,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,0, 5,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,2,2,2,2, 2,2,2,0,0, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,0,0,5, 5,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,2,2,2,2, 2,2,2,0,0, 0,0,0,0,0, 0],
     [0, 0,1,1,1,1, 1,1,1,1,1, 0,1,1,1,1, 1,1,1,1,1, 1,1,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,1,1,1, 0,0,2,0,0, 0,0,0,0,0, 0],
     [0, 1,1,1,1,1, 1,1,1,0,1, 1,0,0,1,4, 4,4,1,1,1, 1,1,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,1, 0,0,0,0,0, 0,0,0,0,0, 0],
-    
     [0, 1,1,1,1,1, 1,1,1,0,1, 1,0,0,0,4, 4,0,0,1,1, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,0,0,0, 0,0,0,0,0, 0],
     [0, 1,1,1,1,1, 1,1,1,1,0, 0,0,0,0,4, 4,0,0,1,1, 0,0,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,0,0, 0],
     [0, 1,1,1,1,1, 1,1,1,1,1, 0,0,0,0,0, 0,0,0,1,0, 0,0,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,1, 1,1,1,0,0, 0],
     [0, 0,0,0,0,1, 1,1,1,1,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,1, 6,6,6,6,0, 0],
     [0, 0,0,0,0,0, 1,1,1,1,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,1, 6,6,6,6,6, 0],
-    
     [0, 0,0,0,0,0, 1,1,1,1,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0, 1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,6,6,6, 0],
     [0, 0,0,0,0,0, 1,1,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,1, 1,1,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,6,6,0, 0],
     [0, 0,0,0,0,0, 1,1,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,1, 1,1,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,6,0,0, 0],
     [0, 0,0,0,0,0, 1,1,1,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,1,1,1,1, 1,1,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,6,0,0, 0],
     [0, 0,0,0,0,0, 1,1,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,1,0,0,0, 1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,1,0,0,0, 0],
-    
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 1,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 0,0,0,0,0, 0],
     [0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,1, 0,0,0,0,0, 0],
@@ -100,16 +113,12 @@ function setup() {
   pg.noErase();
 }
 
-
 function draw() {
   background(240);
   
-  // キーボードの常時入力（ズーム・移動）を処理
   handleKeyboardInput();
-  
   orbitControl();
 
-  // WEBGL用のライト設定
   ambientLight(150);
   directionalLight(255, 255, 255, 0.5, 1, -0.5);
 
@@ -134,33 +143,35 @@ function draw() {
         let isSelected = selectedCountries.includes(tile);
       
         if (tile >= 2 && tile <= 6 && isSelected) {
-          let img = getCountryImage(tile);
+          // 改善：関数呼び出しではなく事前にマッピングしたオブジェクトから高速取得
+          let img = countryImages[tile];
           noStroke();
           texture(img); 
           plane(dotSize, dotSize);
   
+          // 改善：マスク用の描画（必要であれば残しますが、2重planeは描画負荷になるため1つにまとめるか、ここを軽量化するとさらに上がります）
           texture(pg);
           plane(dotSize, dotSize);
           
-          // 現在処理中のマス(r, c)が「各国の特定の1点」である時のみ3Dモデルを描画
           if (isRepresentativeDot(tile, r, c)) {
-            let countryModel = getCountryModel(tile);
-            let bbox = countryModel.calculateBoundingBox();
+            let countryModel = countryModels[tile];
+            // 改善：毎フレームの calculateBoundingBox() を廃止し、setupで計算したキャッシュを適用
+            let sizeBBox = modelSizes[tile];
             push();
             
             if(tile === 2) {
-              translate(0-spacing/2, 0-spacing/2, bbox.size.z/2);
+              translate(0 - spacing / 2, 0 - spacing / 2, sizeBBox.z / 2);
               rotateX(90);
             }
             else if (tile === 3) {
-              translate(0, 0+spacing/2, -10+bbox.size.y/2);
+              translate(0, 0 + spacing / 2, -10 + sizeBBox.y / 2);
             }
             else if (tile === 4) {
-                translate(0, 0, bbox.size.z/9);
-                rotateX(90);
+              translate(0, 0, sizeBBox.z / 9);
+              rotateX(90);
             }
             else if (tile === 6) {
-              translate(0, 0, bbox.size.z/2);
+              translate(0, 0, sizeBBox.z / 2);
               rotateX(90);
             }
             scale(0.3);
@@ -181,32 +192,13 @@ function draw() {
   }
 }
 
-
-function getCountryImage(num) {
-  if (num === 2) return usaImg;
-  if (num === 3) return franceImg;
-  if (num === 4) return indiaImg;
-  if (num === 5) return japanImg;
-  if (num === 6) return brazilImg;
-}
-
-// 各国の3Dモデルを配置する「特定の1ドット」のインデックスを判定
 function isRepresentativeDot(num, r, c) {
-  if (num === 2) return (r === 14  && c === 46); 
+  if (num === 2) return (r === 14 && c === 46); 
   if (num === 3) return (r === 12 && c === 3);  
   if (num === 4) return (r === 18 && c === 16); 
   if (num === 5) return (r === 15 && c === 26); 
   if (num === 6) return (r === 21 && c === 52); 
   return false;
-}
-
-
-function getCountryModel(num) {
-  if (num === 2) return usaModel;
-  if (num === 3) return franceModel;
-  if (num === 4) return indiaModel;
-  if (num === 5) return franceModel;
-  if (num === 6) return brazilModel;
 }
 
 function handleKeyboardInput() {
@@ -234,55 +226,16 @@ function mouseClicked() {
   if (clickedC >= 0 && clickedC < cols && clickedR >= 0 && clickedR < rows) {
     let clickedTile = worldGrid[clickedR][clickedC];
     if (clickedTile >= 2 && clickedTile <= 6) {
-         if (!selectedCountries.includes(clickedTile)) {
-         selectedCountries.push(clickedTile);
-        }
+      if (!selectedCountries.includes(clickedTile)) {
+        selectedCountries.push(clickedTile);
+      }
 
-
-        if (clickedTile == 2) {
-         // ここから追加：ジャンプする前に現在の選択状態を保存する
-         // 配列のままだと保存できないので、JSON.stringifyで文字列に変換して保存します
-         localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
-         
-         window.location.href = '/usa/usa.html';
-         return; // 地図のドット選択処理を動かさないためにここで処理を終了する
-        }
-
-        if (clickedTile == 3) {
-         // ここから追加：ジャンプする前に現在の選択状態を保存する
-         // 配列のままだと保存できないので、JSON.stringifyで文字列に変換して保存します
-         localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
-         
-         window.location.href = '/france/france.html';
-         return; // 地図のドット選択処理を動かさないためにここで処理を終了する
-        }
-
-        if (clickedTile == 4) {
-         // ここから追加：ジャンプする前に現在の選択状態を保存する
-         // 配列のままだと保存できないので、JSON.stringifyで文字列に変換して保存します
-         localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
-         
-         window.location.href = '/india/india.html';
-         return; // 地図のドット選択処理を動かさないためにここで処理を終了する
-        }
-
-        if (clickedTile == 5) {
-         // ここから追加：ジャンプする前に現在の選択状態を保存する
-         // 配列のままだと保存できないので、JSON.stringifyで文字列に変換して保存します
-         localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
-         
-         window.location.href = '/japan/japan.html';
-         return; // 地図のドット選択処理を動かさないためにここで処理を終了する
-        }
-
-        if (clickedTile == 6) {
-         // ここから追加：ジャンプする前に現在の選択状態を保存する
-         // 配列のままだと保存できないので、JSON.stringifyで文字列に変換して保存します
-         localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
-         
-         window.location.href = '/brazil/brazil.html';
-         return; // 地図のドット選択処理を動かさないためにここで処理を終了する
-        }
+      // 改善：連続した大量の if 分岐をオブジェクトマッピングでスッキリ共通化
+      if (countryUrls[clickedTile]) {
+        localStorage.setItem('selectedCountriesData', JSON.stringify(selectedCountries));
+        window.location.href = countryUrls[clickedTile];
+        return;
+      }
     }
   }
 }
